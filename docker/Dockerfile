@@ -7,7 +7,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get upgrade -y
 
-
 # Install a few handy tools
 RUN apt-get update \
   && apt-get -y --quiet --no-install-recommends install \
@@ -25,7 +24,6 @@ RUN apt-get update \
     wget \
     vim \
   && rm -rf /var/lib/apt/lists/*
-
 
 RUN apt-get update \
  && apt-get -y --quiet --no-install-recommends install \
@@ -51,13 +49,25 @@ RUN groupadd --gid $USER_GID $USERNAME \
 USER $USERNAME
 ENV USER=$USERNAME
 
+
 WORKDIR /home/$USERNAME/catkin_ws
 
 RUN mkdir -p /home/$USERNAME/catkin_ws/src
 
 RUN [ "/bin/bash" , "-c" , "\
   source /opt/ros/noetic/setup.bash" ]
+
   
 RUN echo "export PATH=/home/$USERNAME/.local/bin:\$PATH" >> /home/$USERNAME/.bashrc \
 && echo "export PATH=/home/$USERNAME/.local/lib/python3.10/site-packages:\$PATH" >> /home/$USERNAME/.bashrc && echo "source /opt/ros/noetic/setup.bash" >> /home/$USERNAME/.bashrc && echo "source /home/$USERNAME/catkin_ws/devel/setup.bash" >> /home/$USERNAME/.bashrc
 
+
+# RUN [ "/bin/bash" , "-c" , "\
+#  sudo apt-get update && sudo apt-get install -y ros-noetic-ackermann-msgs"]
+  
+RUN sudo apt-get update \
+    && sudo apt-get -y install \
+    ros-noetic-ackermann-msgs \
+    ros-noetic-geographic-msgs \ 
+    ros-noetic-ros-control \
+    ros-noetic-ros-controllers
