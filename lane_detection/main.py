@@ -17,7 +17,7 @@ def main():
 
     # Generate or load an image tensor
     # For example, a random tensor can be used for demonstration purposes
-    img = cv2.imread("adb4871d-4d063244.jpg")
+    img = cv2.imread("/home/ece484/catkin_ws/src/ece484_final_project/lane_detection/adb4871d-4d063244.jpg")
 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 

@@ -49,7 +49,8 @@ RUN apt-get update && \
 
 COPY requirements.txt requirements.txt
 
-RUN python3 -m pip install -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r ./requirements.txt
+# RUN python3 -m pip install -r requirements.txt
 
 RUN python3 -m pip install --upgrade pip
 RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/cu111/torch_stable.html

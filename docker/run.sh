@@ -28,7 +28,8 @@ docker run -it \
     -v "$XAUTH:$XAUTH" \
     -v "/tmp/.X11-unix:/tmp/.X11-unix" \
     -v "/etc/localtime:/etc/localtime:ro" \
-    -v "$(pwd)/../../../..:/home/$DOCKER_USERNAME" \
+    -v "$(pwd)/../../..:/home/$DOCKER_USERNAME/catkin_ws" \
+    -v "$(pwd)/../../../../.cache:/home/$DOCKER_USERNAME/.cache" \
     -v "/dev/input:/dev/input" \
     --privileged \
     --security-opt seccomp=unconfined \
