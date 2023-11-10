@@ -7,6 +7,7 @@
  - Latest Nvidia GPU drivers and CUDA
  - [Docker Engine](https://docs.docker.com/engine/install/ubuntu/) (not Docker Desktop)
  - [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+ - vcstool (sudo apt-get install python3-vcstool)
 
 ### Installation Steps:
 
