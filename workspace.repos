@@ -1,0 +1,5 @@
+repositories:
+    POLARIS_GEM_e2_Simulator:
+        type: git
+        url: https://github.com/hangcui1201/POLARIS_GEM_e2_Simulator.git
+        version: main

@@ -19,11 +19,13 @@ Clone the repository and necessary dependencies:
 ```
 cd ~/ece484_home/catkin_ws/src
 git clone https://gitlab.engr.illinois.edu/vedeti2/ece484_final_project.git
+cd ece484_final_project
+vcs import .. < workspace.repos
 ```
 
 Build the docker image and run a container:
 ```
-cd ece484_final_project/docker
+cd docker
 ./build.sh
 sudo ./run.sh
 ```
