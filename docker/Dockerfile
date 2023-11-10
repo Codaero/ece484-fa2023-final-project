@@ -43,7 +43,6 @@ RUN apt-get update && \
     apt-get install -y \
         python3-pip \
         python3-dev \
-        python3-opencv \
         python3-tk \
         libglib2.0-0
 

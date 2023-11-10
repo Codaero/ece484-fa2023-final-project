@@ -9,6 +9,7 @@ project(lane_detection)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   rospy
+  sensor_msgs
 )
 
 ## System dependencies are found with CMake's conventions

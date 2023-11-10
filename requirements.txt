@@ -3,3 +3,4 @@ prefetch_generator
 scipy
 tqdm
 yacs
+opencv-python
