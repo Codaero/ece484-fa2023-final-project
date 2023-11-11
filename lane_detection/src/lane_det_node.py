@@ -120,7 +120,7 @@ class LaneDetNode:
         # Crop Image back to original resolution:
         lane_overlay = lane_overlay [:IMG_HEIGHT, :]
         
-        lane_overlay = morphology.remove_small_objects(lane_overlay.astype('bool'),min_size=50,connectivity=2)
+        # lane_overlay = morphology.remove_small_objects(lane_overlay.astype('bool'),min_size=50,connectivity=2)
         
         
         self.pub_overlay.publish(self.bridge.cv2_to_imgmsg(lane_overlay, 'rgb8'))

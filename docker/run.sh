@@ -34,4 +34,5 @@ docker run -it \
     --privileged \
     --security-opt seccomp=unconfined \
     --gpus all \
+    --network host \
     ece484
