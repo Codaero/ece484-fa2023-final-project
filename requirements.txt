@@ -4,3 +4,7 @@ scipy
 tqdm
 yacs
 opencv-python
+scikit-image
+torch
+torchvision
+torchaudio
