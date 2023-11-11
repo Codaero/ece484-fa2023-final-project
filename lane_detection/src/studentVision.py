@@ -15,7 +15,7 @@ from skimage import morphology
 # CHANGE THIS LINE TO SWITCH BETWEEN GEM GAZEBO AND REAL LIFE
 GEM_SIMULATOR = False
 ROSBAG_3 = True
-
+CAMERA_TOPIC = "/zed2/zed_node/right_raw/image_raw_color"
 class lanenet_detector():
     def __init__(self):
 
@@ -25,7 +25,7 @@ class lanenet_detector():
         if GEM_SIMULATOR:
             self.sub_image = rospy.Subscriber('/gem/front_single_camera/front_single_camera/image_raw', Image, self.img_callback_sim, queue_size=1)
         elif ROSBAG_3:
-            self.sub_image = rospy.Subscriber('zed2/zed_node/rgb/image_rect_color', Image, self.img_callback_real, queue_size=1)
+            self.sub_image = rospy.Subscriber(CAMERA_TOPIC, Image, self.img_callback_real, queue_size=1)
         else:
             self.sub_image = rospy.Subscriber('camera/image_raw', Image, self.img_callback_real, queue_size=1)
 
@@ -61,6 +61,134 @@ class lanenet_detector():
             self.pub_image.publish(out_img_msg)
             self.pub_bird.publish(out_bird_msg)
 
+    def img_callback_sim(self, data):
+        try:
+            # Convert a ROS image message into an OpenCV image
+            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+        except CvBridgeError as e:
+            print(e)
+
+        raw_img = cv_image.copy()
+        mask_image, bird_image = self.detection(raw_img)
+
+        if mask_image is not None and bird_image is not None:
+            # Convert an OpenCV image into a ROS image message
+            out_img_msg = self.bridge.cv2_to_imgmsg(mask_image, 'bgr8')
+            out_bird_msg = self.bridge.cv2_to_imgmsg(bird_image, 'bgr8')
+
+            # Publish image message in ROS
+            self.pub_image.publish(out_img_msg)
+            self.pub_bird.publish(out_bird_msg)
+
+    def gradient_thresh_gem(self, img, thresh_min=25, thresh_max=100):
+        """
+        Apply sobel edge detection on input image in x, y direction
+        """
+        #1. Convert the image to gray scale
+        #2. Gaussian blur the image
+        #3. Use cv2.Sobel() to find derievatives for both X and Y Axis
+        #4. Use cv2.addWeighted() to combine the results
+        #5. Convert each pixel to uint8, then apply threshold to get binary image
+
+        ## TODO
+
+        # 1 - convert to gray scale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # 2 - Gaussian blur the image
+        blur = cv2.GaussianBlur(gray,(5,5),cv2.BORDER_DEFAULT) # 5 x 5 kernel size
+
+        # 3 - cv2.Sobel() to find derivatives
+        ddepth = cv2.CV_16S
+        gradient_x = cv2.Sobel(blur, ddepth, 1, 0)
+        gradient_y = cv2.Sobel(blur, ddepth, 0, 1)
+
+        # 4 - cv2.addWeighted() to combine the results
+        combined = cv2.addWeighted(gradient_x, 0.5, gradient_y, 0.5, 0.0)
+
+        # 5 - Convert each pixel to uint8 then apply threshold
+        converted_uint8 = cv2.convertScaleAbs(combined)
+
+        threshold = cv2.inRange(converted_uint8, thresh_min, thresh_max)
+        threshold = threshold / 255
+
+        ###
+
+        return threshold
+
+    def gradient_thresh_video(self, img, thresh_min=25, thresh_max=100):
+        """
+        Apply sobel edge detection on input image in x, y direction
+        """
+        #1. Convert the image to gray scale
+        #2. Gaussian blur the image
+        #3. Use cv2.Sobel() to find derievatives for both X and Y Axis
+        #4. Use cv2.addWeighted() to combine the results
+        #5. Convert each pixel to uint8, then apply threshold to get binary image
+
+        ## TODO
+        if ROSBAG_3:
+            thresh_min = 10
+            thresh_max = 9999
+
+        # 1 - convert to gray scale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # 2 - Gaussian blur the image
+        blur = cv2.GaussianBlur(gray,(5,5),cv2.BORDER_DEFAULT) # 5 x 5 kernel size
+
+        # 3 - cv2.Sobel() to find derivatives
+        ddepth = cv2.CV_16S
+        gradient_x = cv2.Sobel(blur, ddepth, 1, 0)
+        gradient_y = cv2.Sobel(blur, ddepth, 0, 1)
+
+        # 4 - cv2.addWeighted() to combine the results
+        combined = cv2.addWeighted(gradient_x, 0.9, gradient_y, 0.1, 0.0)
+
+        # 5 - Convert each pixel to uint8 then apply threshold
+        converted_uint8 = cv2.convertScaleAbs(combined)
+
+        threshold = cv2.inRange(converted_uint8, thresh_min, thresh_max)
+        threshold = threshold / 255
+
+        ###
+
+        return threshold
+
+    def gradient_thresh(self, img, thresh_min=25, thresh_max=100):
+        # Change helper based on simulator or not
+        if GEM_SIMULATOR:
+            return self.gradient_thresh_gem(img)
+        else:
+            return self.gradient_thresh_video(img, 20, 200)
+
+    def color_thresh_gem(self, img, thresh=(100, 255)):
+        """
+        Convert RGB to HSL and threshold to binary image using S channel
+        """
+        #1. Convert the image from RGB to HSL
+        #2. Apply threshold on S channel to get binary image
+        #Hint: threshold on H to remove green grass
+
+        yellow_low = np.array([25, 0, 90])
+        yellow_high = np.array([35, 255, 255])
+
+        # 1 - Convert image from RGB to HSL
+        hsl_img = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
+
+        # 2 - Threshold L channel for white-looking lines
+        white_filter = cv2.inRange(hsl_img[:, :, 1], 170, 255)
+
+        # 3 - Threshold H channel for yellow-looking lines
+        yellow_filter = cv2.inRange(hsl_img, yellow_low, yellow_high)
+
+        # 4 - Return total mask and shrink small noise
+        yw_mask = cv2.bitwise_or(white_filter, yellow_filter)
+        yw_mask = yw_mask / 255 # Convert 0-255 to 0-1
+
+        ####
+
+        return yw_mask
 
     def color_thresh_video(self, img, thresh=(100, 255)):
         """
@@ -219,7 +347,7 @@ class lanenet_detector():
 
                 else:
                     self.detected = False
-
+            
             # Annotate original image
             bird_fit_img = None
             combine_fit_img = None

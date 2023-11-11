@@ -20,14 +20,14 @@ def line_fit(binary_warped):
 	out_img = (np.dstack((binary_warped, binary_warped, binary_warped))*255).astype('uint8')
 	# Find the peak of the left and right halves of the histogram
 	# These will be the starting point for the left and right lines
-	midpoint = np.int(histogram.shape[0]/2)
+	midpoint = int(histogram.shape[0]/2)
 	leftx_base = np.argmax(histogram[100:midpoint]) + 100
 	rightx_base = np.argmax(histogram[midpoint:-100]) + midpoint
 
 	# Choose the number of sliding windows
 	nwindows = 9
 	# Set height of windows
-	window_height = np.int(binary_warped.shape[0]/nwindows)
+	window_height = int(binary_warped.shape[0]/nwindows)
 	# Identify the x and y positions of all nonzero pixels in the image
 	nonzero = binary_warped.nonzero()
 	nonzeroy = np.array(nonzero[0])

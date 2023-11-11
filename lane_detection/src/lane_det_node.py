@@ -7,14 +7,14 @@ import numpy as np
 import torch
 from torchvision import transforms
 
-import line_fit, tune_fit
+from line_fit import line_fit, tune_fit, bird_fit, final_viz
 from Line import Line
 
 from sensor_msgs.msg import Image as sensor_msgs_Image
 from cv_bridge import CvBridge, CvBridgeError
 
 from scipy.optimize import fsolve
-
+from skimage import morphology
 from PIL import Image
 
 # Constants:
@@ -26,6 +26,8 @@ IMG_WIDTH = 1280
 CAMERA_TOPIC = "/zed2/zed_node/right_raw/image_raw_color"
 LANE_OVERLAY_TOPIC = "/lane_detection/lane_overlay"
 CROSSTRACK_ERROR_TOPIC = "/lane_detection/annotate"
+LANE_BIRDSEYE_TOPIC = "lane_detection/birdseye"
+LANE_ANNOTATE_TOPIC = "lane_detection/annotate"
 
 class LaneDetNode:
     def __init__(self) -> None:
@@ -44,8 +46,8 @@ class LaneDetNode:
 
         # Initialize Publishers
         self.pub_overlay = rospy.Publisher(LANE_OVERLAY_TOPIC, sensor_msgs_Image, queue_size=1)
-        self.pub_image = rospy.Publisher(LANE_ANNOTATE_TOPIC, Image, queue_size=1)
-        self.pub_bird = rospy.Publisher(LANE_BIRDSEYE_TOPIC, Image, queue_size=1)
+        self.pub_image = rospy.Publisher(LANE_ANNOTATE_TOPIC, sensor_msgs_Image, queue_size=1)
+        self.pub_bird = rospy.Publisher(LANE_BIRDSEYE_TOPIC, sensor_msgs_Image, queue_size=1)
 
         # Member Variables
         self.left_line = Line(n=5)
@@ -64,8 +66,8 @@ class LaneDetNode:
         # Convert ROS message to an openCV data type
         cv2_img = self.bridge.imgmsg_to_cv2(data, "rgb8")
         
-        alpha = 1.5
-        beta = 1.5
+        alpha = 1
+        beta = 1
         
         cv2_img = cv2.convertScaleAbs(cv2_img, alpha=alpha, beta=beta)
         # cv2.imshow("original image", cv2_img)
@@ -114,6 +116,7 @@ class LaneDetNode:
         lane_overlay = np.zeros_like(img_tensor, dtype=np.uint8)
         lane_overlay[ll_seg_mask == 1] = [255, 255, 255]  # Assuming class '1' corresponds to lane lines
 
+        test_var = lane_overlay[4][4]
         # Crop Image back to original resolution:
         lane_overlay = lane_overlay [:IMG_HEIGHT, :]
         
@@ -211,7 +214,8 @@ class LaneDetNode:
 
                 else:
                     self.detected = False
-            return left_fit, right_fit
+            
+            return self.crossTrackError(left_fit, right_fit)
         
             # # Annotate original image
             # bird_fit_img = None
@@ -225,52 +229,54 @@ class LaneDetNode:
             # return combine_fit_img, bird_fit_img
     
     
-'''
-Inputs: The x and y coordinates for both of the left and right lane
-Returns: Returns a value that corresponds to how many pixels off of the center line of the lane is compared to the center line 
-of the camera
+    '''
+    Inputs: The x and y coordinates for both of the left and right lane
+    Returns: Returns a value that corresponds to how many pixels off of the center line of the lane is compared to the center line 
+    of the camera
 
-Notes: Operates on a set look-ahead distance (1/4 camera height), need to turn right is +, need to turn left is -.
+    Notes: Operates on a set look-ahead distance (1/4 camera height), need to turn right is +, need to turn left is -.
 
 
-'''
-def crossTrackError(leftx, lefty, rightx, righty):  
+    '''
+    def crossTrackError(self, left_fit, right_fit):  
 
-    centerX = IMG_WIDTH / 2
-    lookAheadDist = IMG_HEIGHT/4
-    minLaneClassify = 10
+        centerX = IMG_WIDTH / 2
+        lookAheadDist = IMG_HEIGHT/4
+        minLaneClassify = 10
 
-    if len(rightx)< 10 and len(leftx) < 10: # If no proper lanes are found
-        if(len(rightx)>len(leftx)):
-            return 100 # assume right is positive
+        
+
+        if len(right_fit)< 10 and len(left_fit) < 10: # If no proper lanes are found
+            if(len(right_fit)>len(left_fit)):
+                return 100 # assume right is positive
+            else:
+                return -100
+        elif len(right_fit)< 10: # Only left lane is found (turn right more)
+            #left_fit = np.polyfit(lefty, leftx, 2)
+            leftpoly = np.poly1d(left_fit)
+            leftXVal = fsolve(leftpoly - lookAheadDist, centerX)
+            return centerX - leftXVal[0] +100 # turn right more
+
+
+        elif len(left_fit) < 10:
+            #right_fit = np.polyfit(righty, rightx, 2)
+            rightpoly = np.poly1d(right_fit)
+            rightXVal = fsolve(rightpoly - lookAheadDist, centerX)
+            return centerX - rightXVal[0] - 100 # turn left more
+
         else:
-            return -100
-    elif len(rightx)< 10: # Only left lane is found (turn right more)
-        left_fit = np.polyfit(lefty, leftx, 2)
-        leftpoly = np.poly1d(left_fit)
-        leftXVal = fsolve(leftpoly - lookAheadDist, centerX)
-        return centerX - leftXVal +100 # turn right more
+            #left_fit = np.polyfit(lefty, leftx, 2)
+            #right_fit = np.polyfit(righty, rightx, 2)
 
+            leftpoly = np.poly1d(left_fit)
+            rightpoly = np.poly1d(right_fit)
 
-    elif len(leftx) < 10:
-        right_fit = np.polyfit(righty, rightx, 2)
-        rightpoly = np.poly1d(right_fit)
-        rightXVal = fsolve(rightpoly - lookAheadDist, centerX)
-        return centerX - rightXVal - 100 # turn left more
+            leftXVal = fsolve(leftpoly - lookAheadDist, centerX)
+            rightXVal = fsolve(rightpoly - lookAheadDist, centerX)
 
-    else:
-        left_fit = np.polyfit(lefty, leftx, 2)
-        right_fit = np.polyfit(righty, rightx, 2)
+            average_Fit = (leftXVal[0] + rightXVal[0]) / 2
 
-        leftpoly = np.poly1d(left_fit)
-        rightpoly = np.poly1d(right_fit)
-
-        leftXVal = fsolve(leftpoly - lookAheadDist, centerX)
-        rightXVal = fsolve(rightpoly - lookAheadDist, centerX)
-
-        average_Fit = (leftXVal + rightXVal) / 2
-
-        return centerX - average_Fit
+            return centerX - average_Fit
 
 
 
