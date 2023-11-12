@@ -64,12 +64,12 @@ class LaneDetNode:
     def zed2_image_callback(self, data: sensor_msgs_Image) -> None:
         
         # Convert ROS message to an openCV data type
-        cv2_img = self.bridge.imgmsg_to_cv2(data, "rgb8")
+        cv2_img = self.bridge.imgmsg_to_cv2(data, "bgr8")
         
-        alpha = 1
-        beta = 1
+        # alpha = 1
+        # beta = 1
         
-        cv2_img = cv2.convertScaleAbs(cv2_img, alpha=alpha, beta=beta)
+        # cv2_img = cv2.convertScaleAbs(cv2_img, alpha=alpha, beta=beta)
         # cv2.imshow("original image", cv2_img)
         
         # cv2.imshow("adjusted image", cv2_img_adj)
@@ -85,20 +85,22 @@ class LaneDetNode:
 
 
         # Preprocess the image to filter out the yellow parking lot
-        hsl_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2HLS)
+#         hsl_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2HLS)
 
-        yellow_low = np.array([25, 0, 90])
-        yellow_high = np.array([35, 255, 255])
-        white_filter1 = cv2.inRange(hsl_img[:, :, 1], 150, 255)
-        white_filter = white_filter1
+#         yellow_low = np.array([25, 0, 90])
+#         yellow_high = np.array([35, 255, 255])
 
-        yellow_filter = cv2.inRange(hsl_img, yellow_low, yellow_high)
-        yw_mask = cv2.bitwise_or(yellow_filter, white_filter) / 255 # Convert 0-255 to 0-1
-            
-        dilate_element = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-        yw_mask = cv2.dilate(yw_mask, dilate_element)
-
-        cv2_img = cv2.cvtColor(yw_mask, cv2.COLOR_HLS2BGR)
+#         yellow_filter = cv2.inRange(hsl_img, yellow_low, yellow_high)
+        
+#         rgba_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2BGRA)
+# # Set the alpha channel to zero (transparent) wherever yellow is detected
+#         rgba_img[:, :, 3] = np.where(yellow_filter, 0, 255)
+        
+#         cv2.imshow("rgba", rgba_img)
+#         cv2.waitKey(0)
+#         cv2.destroyAllWindows()
+        
+#         cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_HLS2RGB)
         
 
         # Define the standard normalization transformation
@@ -131,16 +133,16 @@ class LaneDetNode:
         img_pil = Image.fromarray(img_tensor)
 
         # Create an overlay mask for the lanes
-        lane_overlay = np.zeros_like(cv2_img, dtype=np.uint8)
+        lane_overlay = np.zeros_like(img_tensor, dtype=np.uint8)
         
         # Convert to binary mask:
-        lane_overlay[ll_seg_mask == 1] = 1  # Assuming class '1' corresponds to lane lines
+        lane_overlay[ll_seg_mask == 1] = [255,255,255]  # Assuming class '1' corresponds to lane lines
 
         # Crop Image back to original resolution:
         lane_overlay = lane_overlay [:IMG_HEIGHT, :]
         
-        lane_overlay = morphology.remove_small_objects(lane_overlay.astype('bool'),min_size=50,connectivity=2)
-        lane_overlay = lane_overlay.astype(np.uint8)
+        # lane_overlay = morphology.remove_small_objects(lane_overlay.astype('bool'),min_size=50,connectivity=2)
+        # lane_overlay = lane_overlay.astype(np.uint8)
         
         kernel = (9, 9)
         lane_overlay = cv2.morphologyEx(lane_overlay, cv2.MORPH_OPEN, kernel)
