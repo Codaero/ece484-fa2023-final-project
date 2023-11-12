@@ -82,7 +82,25 @@ class LaneDetNode:
         padding_color = [0,0,0] # add black pixels to bottom of image
         
         cv2_img = cv2.copyMakeBorder(cv2_img, 0, padding_rows, 0, 0, cv2.BORDER_CONSTANT, value=padding_color)
+
+
+        # Preprocess the image to filter out the yellow parking lot
+        hsl_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2HLS)
+
+        yellow_low = np.array([25, 0, 90])
+        yellow_high = np.array([35, 255, 255])
+        white_filter1 = cv2.inRange(hsl_img[:, :, 1], 150, 255)
+        white_filter = white_filter1
+
+        yellow_filter = cv2.inRange(hsl_img, yellow_low, yellow_high)
+        yw_mask = cv2.bitwise_or(yellow_filter, white_filter) / 255 # Convert 0-255 to 0-1
+            
+        dilate_element = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+        yw_mask = cv2.dilate(yw_mask, dilate_element)
+
+        cv2_img = cv2.cvtColor(yw_mask, cv2.COLOR_HLS2BGR)
         
+
         # Define the standard normalization transformation
         transform = transforms.Compose([
             transforms.ToPILImage(),
@@ -113,17 +131,25 @@ class LaneDetNode:
         img_pil = Image.fromarray(img_tensor)
 
         # Create an overlay mask for the lanes
-        lane_overlay = np.zeros_like(img_tensor, dtype=np.uint8)
-        lane_overlay[ll_seg_mask == 1] = [255, 255, 255]  # Assuming class '1' corresponds to lane lines
+        lane_overlay = np.zeros_like(cv2_img, dtype=np.uint8)
+        
+        # Convert to binary mask:
+        lane_overlay[ll_seg_mask == 1] = 1  # Assuming class '1' corresponds to lane lines
 
-        test_var = lane_overlay[4][4]
         # Crop Image back to original resolution:
         lane_overlay = lane_overlay [:IMG_HEIGHT, :]
         
-        # lane_overlay = morphology.remove_small_objects(lane_overlay.astype('bool'),min_size=50,connectivity=2)
+        lane_overlay = morphology.remove_small_objects(lane_overlay.astype('bool'),min_size=50,connectivity=2)
+        lane_overlay = lane_overlay.astype(np.uint8)
         
+        kernel = (9, 9)
+        lane_overlay = cv2.morphologyEx(lane_overlay, cv2.MORPH_OPEN, kernel)
         
+        warped_img, M, Minv = self.perspective_transform(lane_overlay)
+                
         self.pub_overlay.publish(self.bridge.cv2_to_imgmsg(lane_overlay, 'rgb8'))
+
+        self.pub_bird.publish(self.bridge.cv2_to_imgmsg(warped_img, 'rgb8'))
         
         # Overlay the binary mask onto the original image
         # Adjust the alpha parameter to control the transparency of the overlay
@@ -132,7 +158,7 @@ class LaneDetNode:
         # print("inference done")
     
     """
-    Get bird's eye view from input image. Tunable parameters for pyramid to selec
+    Get bird's eye view from input image. Tunable parameters for pyramid to select.
     """
     def perspective_transform(self, img, verbose=False):
             #1. Visually determine 4 source points and 4 destination points
@@ -148,7 +174,7 @@ class LaneDetNode:
 
             M = cv2.getPerspectiveTransform(points1, points2)
             Minv = np.linalg.inv(M)
-
+            
             warped_img = cv2.warpPerspective(img, M, (800,600))
 
 
@@ -246,19 +272,19 @@ class LaneDetNode:
 
         
 
-        if len(right_fit)< 10 and len(left_fit) < 10: # If no proper lanes are found
+        if len(right_fit)< minLaneClassify and len(left_fit) < minLaneClassify: # If no proper lanes are found
             if(len(right_fit)>len(left_fit)):
                 return 100 # assume right is positive
             else:
                 return -100
-        elif len(right_fit)< 10: # Only left lane is found (turn right more)
+        elif len(right_fit)< minLaneClassify: # Only left lane is found (turn right more)
             #left_fit = np.polyfit(lefty, leftx, 2)
             leftpoly = np.poly1d(left_fit)
             leftXVal = fsolve(leftpoly - lookAheadDist, centerX)
             return centerX - leftXVal[0] +100 # turn right more
 
 
-        elif len(left_fit) < 10:
+        elif len(left_fit) < minLaneClassify:
             #right_fit = np.polyfit(righty, rightx, 2)
             rightpoly = np.poly1d(right_fit)
             rightXVal = fsolve(rightpoly - lookAheadDist, centerX)
