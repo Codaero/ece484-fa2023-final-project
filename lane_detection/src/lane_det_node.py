@@ -148,7 +148,12 @@ class LaneDetNode:
         lane_overlay = cv2.morphologyEx(lane_overlay, cv2.MORPH_OPEN, kernel)
         
         warped_img, M, Minv = self.perspective_transform(lane_overlay)
-                
+        
+        binary_lane_overlay = warped_img[:, :, 0] / 255
+        binary_lane_overlay = np.array(binary_lane_overlay, dtype=int)
+        
+        self.detection(binary_lane_overlay)
+        
         self.pub_overlay.publish(self.bridge.cv2_to_imgmsg(lane_overlay, 'rgb8'))
 
         self.pub_bird.publish(self.bridge.cv2_to_imgmsg(warped_img, 'rgb8'))
@@ -192,13 +197,12 @@ class LaneDetNode:
         - return: None
     """ 
     def detection(self, img):
-        img_birdeye, M, Minv = self.perspective_transform(img)
-
-        left_fit, right_fit = None
+        left_fit = {}
+        right_fit = {}
         
         if not self.hist:
             # Fit lane without previous result
-            ret = line_fit(img_birdeye)
+            ret = line_fit(img)
             left_fit = ret['left_fit']
             right_fit = ret['right_fit']
             nonzerox = ret['nonzerox']
@@ -209,7 +213,7 @@ class LaneDetNode:
         else:
             # Fit lane with previous result
             if not self.detected:
-                ret = line_fit(img_birdeye)
+                ret = line_fit(img)
 
                 if ret is not None:
                     left_fit = ret['left_fit']
@@ -222,12 +226,15 @@ class LaneDetNode:
                     left_fit = self.left_line.add_fit(left_fit)
                     right_fit = self.right_line.add_fit(right_fit)
 
+                    cv2.imshow("Linefits", ret["out_img"])
+
+
                     self.detected = True
 
             else:
                 left_fit = self.left_line.get_fit()
                 right_fit = self.right_line.get_fit()
-                ret = tune_fit(img_birdeye, left_fit, right_fit)
+                ret = tune_fit(img, left_fit, right_fit)
 
                 if ret is not None:
                     left_fit = ret['left_fit']
@@ -243,7 +250,7 @@ class LaneDetNode:
                 else:
                     self.detected = False
             
-            return self.crossTrackError(left_fit, right_fit)
+        return self.crossTrackError(left_fit, right_fit)
         
             # # Annotate original image
             # bird_fit_img = None
