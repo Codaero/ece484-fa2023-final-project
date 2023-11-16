@@ -3,6 +3,7 @@ import rospy
 
 import cv2
 import numpy as np
+import math
 
 import torch
 from torchvision import transforms
@@ -16,6 +17,8 @@ from cv_bridge import CvBridge, CvBridgeError
 from scipy.optimize import fsolve
 from skimage import morphology
 from PIL import Image
+from std_msgs.msg import Float32
+
 
 # Constants:
 
@@ -48,6 +51,7 @@ class LaneDetNode:
         self.pub_overlay = rospy.Publisher(LANE_OVERLAY_TOPIC, sensor_msgs_Image, queue_size=1)
         self.pub_image = rospy.Publisher(LANE_ANNOTATE_TOPIC, sensor_msgs_Image, queue_size=1)
         self.pub_bird = rospy.Publisher(LANE_BIRDSEYE_TOPIC, sensor_msgs_Image, queue_size=1)
+        self.pub_lane_orientation = rospy.Publisher('/lane_orientation', Float32, queue_size=1)
 
         # Member Variables
         self.left_line = Line(n=5)
@@ -197,72 +201,97 @@ class LaneDetNode:
         - return: None
     """ 
     def detection(self, img):
-        left_fit = {}
-        right_fit = {}
         
-        if not self.hist:
-            # Fit lane without previous result
-            ret = line_fit(img)
-            left_fit = ret['left_fit']
-            right_fit = ret['right_fit']
-            nonzerox = ret['nonzerox']
-            nonzeroy = ret['nonzeroy']
-            left_lane_inds = ret['left_lane_inds']
-            right_lane_inds = ret['right_lane_inds']
-
-        else:
-            # Fit lane with previous result
-            if not self.detected:
-                ret = line_fit(img)
-
-                if ret is not None:
-                    left_fit = ret['left_fit']
-                    right_fit = ret['right_fit']
-                    nonzerox = ret['nonzerox']
-                    nonzeroy = ret['nonzeroy']
-                    left_lane_inds = ret['left_lane_inds']
-                    right_lane_inds = ret['right_lane_inds']
-
-                    left_fit = self.left_line.add_fit(left_fit)
-                    right_fit = self.right_line.add_fit(right_fit)
-
-                    cv2.imshow("Linefits", ret["out_img"])
-
-
-                    self.detected = True
-
-            else:
-                left_fit = self.left_line.get_fit()
-                right_fit = self.right_line.get_fit()
-                ret = tune_fit(img, left_fit, right_fit)
-
-                if ret is not None:
-                    left_fit = ret['left_fit']
-                    right_fit = ret['right_fit']
-                    nonzerox = ret['nonzerox']
-                    nonzeroy = ret['nonzeroy']
-                    left_lane_inds = ret['left_lane_inds']
-                    right_lane_inds = ret['right_lane_inds']
-
-                    left_fit = self.left_line.add_fit(left_fit)
-                    right_fit = self.right_line.add_fit(right_fit)
-
-                else:
-                    self.detected = False
-            
-        return self.crossTrackError(left_fit, right_fit)
         
-            # # Annotate original image
-            # bird_fit_img = None
-            # combine_fit_img = None
-            # if ret is not None:
-            #     bird_fit_img = bird_fit(img_birdeye, ret, save_file=None)
-            #     combine_fit_img = final_viz(img, left_fit, right_fit, Minv)
-            # else:
-            #     print("Unable to detect lanes")
+        points = np.array([[(300, 660), (550,425), (800,425), (1050, 660)]]) 
+        masked_im = np.zeros_like(img)
+        cv2.fillPoly(masked_im, points, color=(255, 255, 255))
+        
+        combined_image = cv2.bitwise_and(img, masked_im, mask=None)
 
-            # return combine_fit_img, bird_fit_img
-    
+        # Copy edges to the images that will display the results in BGR
+        cdstP = cv2.cvtColor(combined_image, cv2.COLOR_GRAY2BGR)
+        # linesP = cv2.HoughLinesP(combined_image, cv2.HOUGH_PROBABILISTIC, np.pi / 180, 150, minLineLength=50, maxLineGap=50)
+        linesP = cv2.HoughLinesP(combined_image, cv2.HOUGH_PROBABILISTIC, np.pi / 180, 50, minLineLength=70, maxLineGap=50)
+        if linesP is None: print(linesP) 
+
+        if linesP is not None:
+            for i in range(0, len(linesP)):
+                l = linesP[i][0]
+                cv2.line(cdstP, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv2.LINE_AA)
+        lane_overlay = cv2.addWeighted(img,1,cdstP,1,1)
+        # print(lane_overlay.shape)
+
+        #Bird's eye view for Gem
+        tl = (500, 425)
+        bl = (280, 660)
+        tr = (780, 425)
+        br = (1000, 660)
+        source_pnts = np.float32([tl, bl, tr, br])
+        dest_pnts = np.float32([[0,0], [0,720], [1280,0], [1280,720]])
+        # for i in range(0,4):
+        #         cv2.circle(lane_overlay,(source_pnts[i][0], source_pnts[i][1]),5,(0,0,255),2)
+
+        M = cv2.getPerspectiveTransform(source_pnts, dest_pnts)
+        birds_eye = cv2.warpPerspective(cdstP, M, (img.shape[1], img.shape[0]))
+        
+        # plt.imshow(birds_eye)
+        # plt.show()
+        gray_birdseye = cv2.cvtColor(birds_eye, cv2.COLOR_BGR2GRAY)
+        gray_birdseye = cv2.GaussianBlur(gray_birdseye, (3,3), 0)
+        gray_birdseye = cv2.Canny(gray_birdseye, 50, 95, None, 3)
+        lines_birdseye = cv2.HoughLinesP(gray_birdseye, cv2.HOUGH_PROBABILISTIC, np.pi / 180, 80, minLineLength=70, maxLineGap=50)
+
+        if lines_birdseye is not None:
+            for l in lines_birdseye:
+                x1, y1, x2, y2 = l[0]
+                #left lane
+                if x1 < 640:
+                    x1_left = x1
+                    x2_left = x2
+                    y1_left = y1
+                    y2_left = y2
+                
+                # elif x1 > 640 or x2 > 640:
+                #     x1_right = x1
+                #     x2_right = x2
+                #     y1_right = y1
+                #     y2_right = y2
+                
+                try:
+                    # calculate middle points
+                    # x1_mid = int((x1_right + x1_left)/2)
+                    # x2_mid = int((x2_right + x2_left)/2)
+                
+                    # y1_mid = int((y1_right + y1_left)/2)
+                    # y2_mid = int((y2_right + y2_left)/2)
+                
+                    # cv2.line(birds_eye, (640, 300), (x2_mid, 420), (0, 255, 0), 2)
+                    
+                    
+                    #draw center line in the middle of the birds eye 
+                    xc_1, xc_2 = 640, 640
+                    yc_1, yc_2 = 720, 420
+                    cv2.line(birds_eye, (xc_1,yc_1), (xc_2, yc_2), (0, 0, 255), 2)
+                
+                    #calculate angle between line and center line
+                    if x2_left > x1_left and y2_left > y1_left:
+                        ang_rad = np.arctan2(x2_left-x1_left, y2_left-y1_left) 
+                        angle = (ang_rad *180 / np.pi)
+
+                        self.pub_lane_orientation.publish(math.radians(angle))
+
+                        x_dist = int(200*math.cos(ang_rad))
+                        cv2.line(birds_eye, (xc_1,yc_1), (xc_2+x_dist, yc_2), (255, 0, 255), 2)
+
+                except NameError:
+                    continue
+                cv2.line(birds_eye, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+        # self.pub_steering_angle.publish(angle)
+
+        return lane_overlay, birds_eye
+
     
     '''
     Inputs: The x and y coordinates for both of the left and right lane
