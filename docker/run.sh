@@ -35,4 +35,4 @@ docker run -it \
     --security-opt seccomp=unconfined \
     --gpus all \
     --network host \
-    ece484
+    codaero/ece484

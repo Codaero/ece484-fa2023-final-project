@@ -4,9 +4,15 @@ from gazebo_msgs.msg import ModelState
 from ackermann_msgs.msg import AckermannDrive
 import numpy as np
 from simple_pid import PID
-from std_msgs.msg import Float32MultiArray
 import math
 from util import euler_to_quaternion, quaternion_to_euler
+import numpy as np
+from numpy import linalg as la
+import scipy.signal as signal
+from std_msgs.msg import String, Bool, Float32, Float64, Float32MultiArray
+
+# GEM PACMod Headers
+from pacmod_msgs.msg import PositionWithSpeed, PacmodCmd, SystemRptFloat, VehicleSpeedRpt
 
 import time
 
@@ -25,106 +31,150 @@ class vehicleController():
 
     pid_angle = PID(-2, -0.5, -0.0, setpoint=0.0, output_limits=(-5, 5))
     pid_angle.error_map = pi_clip #function to map angle errror values between -pi and pi
-
     pid_velocity = PID(-20, -10, -0.0, setpoint=0.0, output_limits=(0, 2))
 
     def __init__(self):
-        # Publisher to publish the control input to the vehicle model
-        self.sub_image = rospy.Subscriber('camera/image_raw', Image, self.img_callback, queue_size=1)
-        self.controlPub = rospy.Publisher("/ackermann_cmd", AckermannDrive, queue_size = 1)
-        self.prev_vel = 0
-        self.L = 1.75 # Wheelbase, can be get from gem_control.py
-        self.log_acceleration = True
-        self.prev_alpha = 0
-        # self.dt = 
+
+        self.dt = 0.1
+        self.rate = rospy.Rate(30)
+        self.target_throttle = 0.3
+        self.lane_orientation_sub = rospy.Subscriber('/lane_orientation', Float32, self.control_callback)
+        self.lane_orientation = 0.0
+        # self.steering_angle = 0.0
+        # self.ackermann_msg = AckermannDrive()
+        # self.ackermann_msg.steering_angle = 0.0
 
 
-    def img_callback(self, data):
 
-        try:
-            # Convert a ROS image message into an OpenCV image
-            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-        except CvBridgeError as e:
-            print(e)
+        # -------------------- PACMod setup --------------------
+        self.gem_enable    = False
+        self.pacmod_enable = True
 
-        raw_img = cv_image.copy()
-        mask_image, bird_image = self.detection(raw_img)
+        # GEM vehicle enable
+        self.enable_sub = rospy.Subscriber('/pacmod/as_rx/enable', Bool, self.pacmod_enable_callback)
+        # self.enable_cmd = Bool()
+        # self.enable_cmd.data = False
 
-        if mask_image is not None and bird_image is not None:
-            # Convert an OpenCV image into a ROS image message
-            out_img_msg = self.bridge.cv2_to_imgmsg(mask_image, 'bgr8')
-            out_bird_msg = self.bridge.cv2_to_imgmsg(bird_image, 'bgr8')
+        # GEM vehicle gear control, neutral, forward and reverse, publish once
+        self.gear_pub = rospy.Publisher('/pacmod/as_rx/shift_cmd', PacmodCmd, queue_size=1)
+        self.gear_cmd = PacmodCmd()
+        self.gear_cmd.ui16_cmd = 2 # SHIFT_NEUTRAL
 
-            # Publish image message in ROS
-            self.pub_image.publish(out_img_msg)
-            self.pub_bird.publish(out_bird_msg)
+        # GEM vehilce brake control
+        self.brake_pub = rospy.Publisher('/pacmod/as_rx/brake_cmd', PacmodCmd, queue_size=1)
+        self.brake_cmd = PacmodCmd()
+        self.brake_cmd.enable = False
+        self.brake_cmd.clear  = True
+        self.brake_cmd.ignore = True
 
-    def get_images(self):
-        # Get the current state of the vehicle
-        # Input: None
-        # Output: ModelState, the state of the vehicle, contain the
-        #   position, orientation, linear velocity, angular velocity
-        #   of the vehicle
-        rospy.wait_for_service('/gazebo/get_model_state')
-        try:
-            serviceResponse = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-            resp = serviceResponse(model_name='gem')
-        except rospy.ServiceException as exc:
-            rospy.loginfo("Service did not process request: "+str(exc))
-            resp = GetModelStateResponse()
-            resp.success = False
-        return resp
+        # GEM vechile forward motion control
+        self.accel_pub = rospy.Publisher('/pacmod/as_rx/accel_cmd', PacmodCmd, queue_size=1)
+        self.accel_cmd = PacmodCmd()
+        self.accel_cmd.enable = False
+        self.accel_cmd.clear  = True
+        self.accel_cmd.ignore = True
+
+        # GEM vechile turn signal control
+        self.turn_pub = rospy.Publisher('/pacmod/as_rx/turn_cmd', PacmodCmd, queue_size=1)
+        self.turn_cmd = PacmodCmd()
+        self.turn_cmd.ui16_cmd = 1 # None
+
+        # GEM vechile steering wheel control
+        self.steer_pub = rospy.Publisher('/pacmod/as_rx/steer_cmd', PositionWithSpeed, queue_size=1)
+        self.steer_cmd = PositionWithSpeed()
+        self.steer_cmd.angular_position = 0.0 # radians, -: clockwise, +: counter-clockwise
+        self.steer_cmd.angular_velocity_limit = 2.0 # radians/second
 
 
-    # Tasks 1: Read the documentation https://docs.ros.org/en/fuerte/api/gazebo/html/msg/ModelState.html
-    #       and extract yaw, velocity, vehicle_position_x, vehicle_position_y
-    # Hint: you may use the the helper function(quaternion_to_euler()) we provide to convert from quaternion to euler
+
+    def control_callback(self, msg):
+        self.lane_orientation = msg.data
+        print(self.lane_orientation)
+
+    # PACMod enable callback function
+    def pacmod_enable_callback(self, msg):
+        self.pacmod_enable = msg.data
+
     def compute_lateral_error(self, image):
-        
-
-
-        return angle_error
-
+        pass
 
     def longititudal_PID_controller(self, lateral_error):
 
         target_velocity = self.pid_velocity(lateral_error, dt=self.dt)
-
-        return target_velocity
-
+        pass
 
     # Task 3: Lateral Controller (Pure Pursuit)
-    def lateral_PID_controller(self, angle_error):
-
-        steering_angle = self.pid_angle(angle_error, dt = self.dt)
-
+    def lateral_PID_controller(self, lane_orentation):
+        steering_angle = self.pid_angle(lane_orentation, dt = self.dt) #radians
         return steering_angle
 
+    
+    # Start PACMod interface
+    def start_pacmod(self):
+        print("test")
+        if(self.pacmod_enable == True):
+            print("running 1")
+            if (self.gem_enable == False):
+                print("running 2")
+                # ---------- Enable PACMod ----------
 
-    def execute(self):
+                # enable forward gear
+                self.gear_cmd.ui16_cmd = 3
 
-        # Acceleration Profile
-        if self.log_acceleration:
-            acceleration = (curr_vel- self.prev_vel) * 100 # Since we are running in 100Hz
+                # enable brake
+                self.brake_cmd.enable  = True
+                self.brake_cmd.clear   = False
+                self.brake_cmd.ignore  = False
+                self.brake_cmd.f64_cmd = 0.0
 
-        # print(acceleration)
-        self.prev_vel = curr_vel
+                # enable gas 
+                self.accel_cmd.enable  = True
+                self.accel_cmd.clear   = False
+                self.accel_cmd.ignore  = False
+                self.accel_cmd.f64_cmd = 0.0
 
-        print(curr_x, curr_y)
+                self.gear_pub.publish(self.gear_cmd)
+                print("Foward Engaged!")
 
-        target_velocity = self.longititudal_controller(curr_x, curr_y, curr_vel, curr_yaw, future_unreached_waypoints)
-        target_steering = self.pure_pursuit_lateral_controller(curr_x, curr_y, curr_yaw, target_point, future_unreached_waypoints)
+                self.turn_pub.publish(self.turn_cmd)
+                print("Turn Signal Ready!")
+                
+                self.brake_pub.publish(self.brake_cmd)
+                print("Brake Engaged!")
+
+                self.accel_pub.publish(self.accel_cmd)
+                print("Gas Engaged!")
+
+                self.gem_enable = True
+
+            else: 
+                steering_angle = self.lateral_PID_controller(self.lane_orientation)
+                print ("running 3")
+                if (steering_angle <= 45 and steering_angle >= -45):
+                    self.turn_cmd.ui16_cmd = 1
+                elif(steering_angle > 45):
+                    self.turn_cmd.ui16_cmd = 2 # turn left
+                else:
+                    self.turn_cmd.ui16_cmd = 0 # turn right
+
+                self.accel_cmd.f64_cmd = 0.33
+                self.steer_cmd.angular_position = 0
+
+                self.accel_pub.publish(self.accel_cmd)
+                self.steer_pub.publish(self.steer_cmd)
+                
+        self.rate.sleep()
 
 
-        #Pack computed velocity and steering angle into Ackermann command
-        newAckermannCmd = AckermannDrive()
-        newAckermannCmd.speed = target_velocity
-        newAckermannCmd.steering_angle = target_steering
+def execute():
+    rospy.init_node('pacmod_control_node', anonymous=True)
+    controller = vehicleController()
 
-        # Publish the computed control input to vehicle model
-        self.controlPub.publish(newAckermannCmd)
+    while not rospy.core.is_shutdown():
+        try:
+            controller.start_pacmod()
+        except rospy.ROSInterruptException:
+            pass
 
-    def stop(self):
-        newAckermannCmd = AckermannDrive()
-        newAckermannCmd.speed = 0
-        self.controlPub.publish(newAckermannCmd)
+if __name__ == '__main__':
+    execute()
