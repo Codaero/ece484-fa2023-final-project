@@ -86,4 +86,5 @@ RUN sudo apt-get update \
     ros-noetic-ackermann-msgs \
     ros-noetic-geographic-msgs \ 
     ros-noetic-ros-control \
-    ros-noetic-ros-controllers
+    ros-noetic-ros-controllers \
+    ros-noetic-robot-localization
