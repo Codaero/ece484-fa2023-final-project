@@ -1,0 +1,17 @@
+digraph G {
+"zed2_imu_link" -> "zed2_left_camera_optical_frame"[label=" Broadcaster: /static_transform_publisher_1701124131071077708\nAverage rate: 19.998\nBuffer length: 4.95\nMost recent transform: 1700949593.197\nOldest transform: 1700949588.246\n"];
+"odom" -> "zed2_imu_link"[label=" Broadcaster: /rtabmap/stereo_odometry\nAverage rate: 12.04\nBuffer length: 4.9\nMost recent transform: 1700949593.013\nOldest transform: 1700949588.113\n"];
+"map" -> "odom"[label=" Broadcaster: /rtabmap/rtabmap\nAverage rate: 20.2\nBuffer length: 4.95\nMost recent transform: 1700949593.257\nOldest transform: 1700949588.306\n"];
+"base_link" -> "lidar1"[label=" Broadcaster: /play_1701124155290423744\nAverage rate: 9.357\nBuffer length: 4.809\nMost recent transform: 1700949593.072\nOldest transform: 1700949588.263\n"];
+"left_steering_hinge_link" -> "front_left_wheel_link"[label=" Broadcaster: /play_1701124155290423744\nAverage rate: 4.167\nBuffer length: 4.8\nMost recent transform: 1700949593.058\nOldest transform: 1700949588.258\n"];
+"base_link" -> "left_steering_hinge_link"[label=" Broadcaster: /play_1701124155290423744\nAverage rate: 4.167\nBuffer length: 4.8\nMost recent transform: 1700949593.058\nOldest transform: 1700949588.258\n"];
+"right_steering_hinge_link" -> "front_right_wheel_link"[label=" Broadcaster: /play_1701124155290423744\nAverage rate: 4.167\nBuffer length: 4.8\nMost recent transform: 1700949593.058\nOldest transform: 1700949588.258\n"];
+"base_link" -> "right_steering_hinge_link"[label=" Broadcaster: /play_1701124155290423744\nAverage rate: 4.167\nBuffer length: 4.8\nMost recent transform: 1700949593.058\nOldest transform: 1700949588.258\n"];
+"base_link" -> "rear_left_wheel_link"[label=" Broadcaster: /play_1701124155290423744\nAverage rate: 4.167\nBuffer length: 4.8\nMost recent transform: 1700949593.058\nOldest transform: 1700949588.258\n"];
+"base_link" -> "rear_right_wheel_link"[label=" Broadcaster: /play_1701124155290423744\nAverage rate: 4.167\nBuffer length: 4.8\nMost recent transform: 1700949593.058\nOldest transform: 1700949588.258\n"];
+"base_link" -> "front_radar"[label=" Broadcaster: /play_1701124155290423744\nAverage rate: 13.233\nBuffer length: 4.761\nMost recent transform: 1700949593.152\nOldest transform: 1700949588.391\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1700949593.1768224"[ shape=plaintext ] ;
+}->"base_link";
+}
