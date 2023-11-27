@@ -87,4 +87,4 @@ RUN sudo apt-get update \
     ros-noetic-geographic-msgs \ 
     ros-noetic-ros-control \
     ros-noetic-ros-controllers \
-    ros-noetic-robot-localization
+    ros-noetic-rtabmap-ros
