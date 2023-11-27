@@ -87,4 +87,5 @@ RUN sudo apt-get update \
     ros-noetic-geographic-msgs \ 
     ros-noetic-ros-control \
     ros-noetic-ros-controllers \
-    ros-noetic-rtabmap-ros
+    ros-noetic-rtabmap-ros \
+    ros-noetic-tf2-tools

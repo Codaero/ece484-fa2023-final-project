@@ -34,4 +34,4 @@ docker run -it \
     --privileged \
     --security-opt seccomp=unconfined \
     --gpus all \
-    ece484
+    codaero/ece484
