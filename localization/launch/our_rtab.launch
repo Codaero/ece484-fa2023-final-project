@@ -52,8 +52,8 @@
       </node>
 
       <!-- Visual SLAM: args: "delete_db_on_start" and "udebug" -->
-      <!-- Eric Roth - 11-27-2023 : Deleted db delete -->
-      <node name="rtabmap" pkg="rtabmap_slam" type="rtabmap" output="screen" args="">
+      <!-- Eric Roth - 11-27-2023 : Deleted (-)-delete_db_on_start -->
+      <node name="rtabmap" pkg="rtabmap_slam" type="rtabmap" output="screen" args="--delete_db_on_start">
          <param name="frame_id"         type="string" value="zed2_imu_link"/>
          <param unless="$(arg stereo_sync)" name="subscribe_stereo" type="bool" value="true"/>
          <param name="subscribe_depth"  type="bool" value="false"/>
@@ -71,16 +71,24 @@
          <param name="map_negative_poses_ignored" type="bool" value="true"/>
 
          <!-- RTAB-Map's parameters -->
+         <param name="RGBD/OptimizeMaxError"             type="double" value="1"  />
+         <param name="RGBD/LoopClosureReextractFeatures" type="string" value="true"/>
+
          <param name="Rtabmap/TimeThr"                   type="string" value="700"/>
          <param name="Grid/DepthDecimation"              type="string" value="4"/>
          <param name="Grid/FlatObstacleDetected"         type="string" value="true"/>
          <param name="Kp/MaxDepth"                       type="string" value="0"/>
-         <param name="Kp/DetectorStrategy"               type="string" value="6"/>
+         <param name="Kp/DetectorStrategy"               type="string" value="6"/>   <!-- Maybe SIFT/SURF would be better? (Currently GFFT)-->
          <param name="Vis/EstimationType"                type="string" value="1"/>   <!-- 0=3D->3D, 1=3D->2D (PnP) -->
-         <param name="Vis/MaxDepth"                      type="string" value="0"/>
+         <param name="Vis/MaxDepth"                      type="string" value="0"/>   
          <param name="RGBD/CreateOccupancyGrid"          type="string" value="true"/>
-         <param name="Reg/Force3DoF"                                   value="true" /> <!-- Force 3DOF (x, y, theta) -->
-         <param name="Optimizer/Slam2D"                                value="true" /> <!-- Optimize SLAM performance for 2-D mapping -->
+         <param name="Reg/Force3DoF"                                   value="true"/> <!-- Force 3DOF (x, y, theta) -->
+         <param name="Optimizer/Slam2D"                                value="true"/> <!-- Optimize SLAM performance for 2-D mapping -->
+         <param name="RGBD/OptimizeFromGraphEnd"         type="string" value="true"/> <!-- Optimize the graph -->
+
+         <!-- GEM vehicle specific parameters | comment out if data not available -->
+         <!-- <param name="gps_topic" value="/novatel/gps"/>
+         <param name="imu_topic" value="/novatel/imu"/> -->
       </node>
 
       <!-- Visualisation RTAB-Map -->
