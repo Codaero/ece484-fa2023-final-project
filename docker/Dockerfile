@@ -84,8 +84,9 @@ RUN echo "export PATH=/home/$USERNAME/.local/bin:\$PATH" >> /home/$USERNAME/.bas
 RUN sudo apt-get update \
     && sudo apt-get -y install \
     ros-noetic-ackermann-msgs \
-    ros-noetic-geographic-msgs \ 
+    ros-noetic-geographic-msgs \
     ros-noetic-ros-control \
     ros-noetic-ros-controllers \
     ros-noetic-rtabmap-ros \
-    ros-noetic-tf2-tools
+    ros-noetic-tf2-tools \
+    ros-noetic-robot-localization
