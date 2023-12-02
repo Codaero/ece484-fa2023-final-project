@@ -107,14 +107,14 @@ class PurePursuit(object):
 
         self.look_ahead = 4
         self.wheelbase  = 1.75 # meters
-        self.offset     = 0.46 # meters
+        self.offset     = 0.86 # meters
 
         self.enable_sub = rospy.Subscriber("/pacmod/as_tx/enable", Bool, self.enable_callback)
 
         self.speed_sub  = rospy.Subscriber("/pacmod/parsed_tx/vehicle_speed_rpt", VehicleSpeedRpt, self.speed_callback)
         self.speed      = 0.0
 
-        self.pose_subscriber = rospy.Subscriber("/zed2/zed_node/odom", PoseWithCovarianceStamped, self.ekf_callback)
+        self.pose_subscriber = rospy.Subscriber("/odometry/filtered", Odometry, self.ekf_callback)
         self.ekf_x, self.ekf_y, self.ekf_heaading = 0.0, 0.0, 0.0
 
         self.lane_orientation_sub = rospy.Subscriber('/lane_orientation', Float32, self.lane_orientation_callback)
@@ -175,7 +175,7 @@ class PurePursuit(object):
         q = msg.pose.pose.orientation
         [phi, theta, psi] = self.quaternion_to_euler(q.x, q.y, q.z, q.w)
         self.ekf_x, self.ekf_y = p.x, p.y
-        self.ekf_heaading = psi
+        self.ekf_heaading = psi #radians
 
     def quaternion_to_euler(self, x, y, z, w):
         t0 = +2.0 * (w * x + y * z)
@@ -336,12 +336,11 @@ class PurePursuit(object):
             f_delta_deg = np.degrees(f_delta)
 
             # steering_angle in degrees
-            # steering_angle = self.front2steer(f_delta_deg)
+            steering_angle = self.front2steer(f_delta_deg)
             
-
-            #------------------------student_vision.py------------------------------#
-            steering_angle = self.front2steer(np.degrees(self.lane_orientation))
-            print("steering angle ", steering_angle)
+            # #------------------------student_vision.py------------------------------#
+            # steering_angle = self.front2steer(np.degrees(self.lane_orientation))
+            # print("steering angle ", steering_angle)
 
             if(self.gem_enable == True):
                 print("Current index: " + str(self.goal))
