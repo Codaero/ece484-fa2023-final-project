@@ -12,6 +12,9 @@ import numpy as np
 from numpy import linalg as la
 import scipy.signal as signal
 
+# Import Stop Sign Detector
+from vehicle_vision.stop_sign_detector import StopSignDetector
+
 # ROS Headers
 import alvinxy as axy # Import AlvinXY transformation module
 import rospy
@@ -20,10 +23,11 @@ import rospy
 from nav_msgs.msg import Odometry
 from std_msgs.msg import String, Bool, Float32, Float64
 from geometry_msgs.msg import PoseWithCovarianceStamped
-from novatel_gps_msgs.msg import NovatelPosition, NovatelXYZ, Inspva
+#from novatel_gps_msgs.msg import NovatelPosition, NovatelXYZ, Inspva
 
 # GEM PACMod Headers
 from pacmod_msgs.msg import PositionWithSpeed, PacmodCmd, SystemRptFloat, VehicleSpeedRpt
+
 
 
 def pi_clip(angle):
@@ -120,6 +124,8 @@ class PurePursuit(object):
         self.lane_orientation_sub = rospy.Subscriber('/lane_orientation', Float32, self.lane_orientation_callback)
         self.lane_orientation = 0.0
 
+        # Stop Sign Detector
+        self.ssd = StopSignDetector()
 
         # read waypoints into the system 
         self.goal       = 0            
@@ -340,8 +346,8 @@ class PurePursuit(object):
             
 
             #------------------------student_vision.py------------------------------#
-            steering_angle = self.front2steer(np.degrees(self.lane_orientation))
-            print("steering angle ", steering_angle)
+            # steering_angle = self.front2steer(np.degrees(self.lane_orientation))
+            # print("steering angle ", steering_angle)
 
             if(self.gem_enable == True):
                 print("Current index: " + str(self.goal))
@@ -360,7 +366,7 @@ class PurePursuit(object):
                 output_accel = self.max_accel
 
             if output_accel < 0.3:
-                output_accel = 0.3
+                output_accel = 0.5
 
             if (f_delta_deg <= 30 and f_delta_deg >= -30):
                 self.turn_cmd.ui16_cmd = 1
@@ -369,9 +375,16 @@ class PurePursuit(object):
             else:
                 self.turn_cmd.ui16_cmd = 0 # turn right
 
+            # Check if we see stop sign
+            
+            if self.ssd.detect_stop_sign():
+                self.accel_pub.publish(-1)
+            else:
+                self.accel_pub.publish(self.accel_cmd)
+
             self.accel_cmd.f64_cmd = output_accel
             self.steer_cmd.angular_position = np.radians(steering_angle)
-            self.accel_pub.publish(self.accel_cmd)
+            #self.accel_pub.publish(self.accel_cmd)
             self.steer_pub.publish(self.steer_cmd)
             self.turn_pub.publish(self.turn_cmd)
 
