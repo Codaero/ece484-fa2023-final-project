@@ -18,6 +18,7 @@ import rospy
 
 # GEM Sensor Headers
 from nav_msgs.msg import Odometry
+from simple_pid import PID
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from std_msgs.msg import String, Bool, Float32, Float64
 from novatel_gps_msgs.msg import NovatelPosition, NovatelXYZ, Inspva
@@ -25,6 +26,7 @@ from novatel_gps_msgs.msg import NovatelPosition, NovatelXYZ, Inspva
 # GEM PACMod Headers
 from pacmod_msgs.msg import PositionWithSpeed, PacmodCmd, SystemRptFloat, VehicleSpeedRpt
 
+GEM_CAR = False
 
 def pi_clip(angle):
     """function to map angle error values between [-pi, pi]"""
@@ -36,7 +38,7 @@ def pi_clip(angle):
             return angle + 2*math.pi
     return angle
 
-class PID(object):
+class PID2(object):
 
     def __init__(self, kp, ki, kd, wg=None):
 
@@ -100,22 +102,26 @@ class OnlineFilter(object):
 
 
 class PurePursuit(object):
+    pid_angle = PID(-2, -0.5, -0.0, setpoint=0.0, output_limits=(-5, 5))
+    pid_angle.error_map = pi_clip #function to map angle errror values between -pi and pi
     
     def __init__(self):
 
-        self.rate       = rospy.Rate(10)
+        self.rate = rospy.Rate(10)
+        self.dt = 0.1
 
         self.look_ahead = 4
         self.wheelbase  = 1.75 # meters
-        self.offset     = 0.46 # meters
+        self.offset     = 0.86 # meters
 
         self.enable_sub = rospy.Subscriber("/pacmod/as_tx/enable", Bool, self.enable_callback)
 
         self.speed_sub  = rospy.Subscriber("/pacmod/parsed_tx/vehicle_speed_rpt", VehicleSpeedRpt, self.speed_callback)
         self.speed      = 0.0
 
-        self.pose_subscriber = rospy.Subscriber("/zed2/zed_node/odom", Odometry, self.ekf_callback)
-        self.ekf_x, self.ekf_y, self.ekf_heaading = 0.0, 0.0, 0.0
+        # self.pose_subscriber = rospy.Subscriber("/odometry/filtered", Odometry, self.ekf_callback)
+        self.pose_subscriber = rospy.Subscriber("/rtabmap/localization_pose", PoseWithCovarianceStamped, self.ekf_callback)
+        self.ekf_x, self.ekf_y, self.ekf_heading = 0.0, 0.0, 0.0
 
         self.lane_orientation_sub = rospy.Subscriber('/lane_orientation', Float32, self.lane_orientation_callback)
         self.lane_orientation = 0.0
@@ -123,11 +129,11 @@ class PurePursuit(object):
 
         # read waypoints into the system 
         self.goal       = 0            
-        # self.read_waypoints() 
+        self.read_waypoints() 
 
         self.desired_speed = 1.5  # m/s, reference speed
         self.max_accel     = 0.48 # % of acceleration
-        self.pid_speed     = PID(0.5, 0.0, 0.1, wg=20)
+        self.pid_speed     = PID2(0.5, 0.0, 0.1, wg=20)
         self.speed_filter  = OnlineFilter(1.2, 30, 4)
 
         # -------------------- PACMod setup --------------------
@@ -175,7 +181,7 @@ class PurePursuit(object):
         q = msg.pose.pose.orientation
         [phi, theta, psi] = self.quaternion_to_euler(q.x, q.y, q.z, q.w)
         self.ekf_x, self.ekf_y = p.x, p.y
-        self.ekf_heaading = psi + 88    # heading in degrees world frame
+        self.ekf_heading = math.degrees(psi) + 88.0    # heading in degrees world frame
 
     def quaternion_to_euler(self, x, y, z, w):
         t0 = +2.0 * (w * x + y * z)
@@ -226,7 +232,11 @@ class PurePursuit(object):
     def read_waypoints(self):
         # read recorded GPS lat, lon, heading
         dirname  = os.path.dirname(__file__)
-        filename = os.path.join(dirname, '../waypoints/center_lane_origin.csv')
+
+        if not GEM_CAR:
+            filename = os.path.join(dirname, '/home/paulosuma/Documents/SafeAuto/mp-release-23fa-main/src/gem_Project/center_lane_origin.csv')
+        else:
+            filename = os.path.join(dirname, '/home/ece484/catkin_ws/src/vehicle_control/center_lane_origin.csv')
         with open(filename) as f:
             path_points = [tuple(line) for line in csv.reader(f)]
         # x towards East and y towards North
@@ -245,11 +255,13 @@ class PurePursuit(object):
 
         # heading to yaw (degrees to radians)
         # heading is calculated from two GNSS antennas
-        curr_yaw = self.heading_to_yaw(self.heading) 
+        curr_yaw = self.heading_to_yaw(self.ekf_heading) 
 
         # reference point is located at the center of rear axle
         curr_x = local_x_curr - self.offset * np.cos(curr_yaw)
         curr_y = local_y_curr - self.offset * np.sin(curr_yaw)
+
+        print(round(curr_x, 3), round(curr_y, 3), round(curr_yaw, 4))
 
         return round(curr_x, 3), round(curr_y, 3), round(curr_yaw, 4)
 
@@ -328,7 +340,7 @@ class PurePursuit(object):
             # true look-ahead distance between a waypoint and current position
             L = self.dist_arr[self.goal]
 
-            # find the curvature and the angle 
+            # find the curvature and the angle, radians
             alpha = self.heading_to_yaw(self.path_points_heading[self.goal]) - curr_yaw
 
             # ----------------- tuning this part as needed -----------------
@@ -342,12 +354,13 @@ class PurePursuit(object):
             f_delta_deg = np.degrees(f_delta)
 
             # steering_angle in degrees
-            # steering_angle = self.front2steer(f_delta_deg)
+            steering_angle = self.front2steer(f_delta_deg)
             
 
-            #------------------------student_vision.py------------------------------#
-            steering_angle = self.front2steer(np.degrees(self.lane_orientation))
-            print("steering angle ", steering_angle)
+            # #------------------------student_vision.py------------------------------#
+            # steering_angle = self.pid_angle(self.lane_orientation, dt = self.dt)
+            # steering_angle = self.front2steer(np.degrees(self.lane_orientation))
+            # print("steering angle ", steering_angle)
 
             if(self.gem_enable == True):
                 print("Current index: " + str(self.goal))
@@ -392,6 +405,7 @@ def pure_pursuit():
     while not rospy.core.is_shutdown():
         try:
             pp.start_pp()
+            # pp.get_gem_state()
         except rospy.ROSInterruptException:
             pass
 

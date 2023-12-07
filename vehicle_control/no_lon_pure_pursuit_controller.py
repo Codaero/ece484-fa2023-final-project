@@ -28,7 +28,7 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 # GEM PACMod Headers
 from pacmod_msgs.msg import PositionWithSpeed, PacmodCmd, SystemRptFloat, VehicleSpeedRpt
 
-
+GEM_CAR = False
 
 def pi_clip(angle):
     """function to map angle error values between [-pi, pi]"""
@@ -111,15 +111,16 @@ class PurePursuit(object):
 
         self.look_ahead = 4
         self.wheelbase  = 1.75 # meters
-        self.offset     = 0.46 # meters
+        self.offset     = 0.86 # meters
 
         self.enable_sub = rospy.Subscriber("/pacmod/as_tx/enable", Bool, self.enable_callback)
 
         self.speed_sub  = rospy.Subscriber("/pacmod/parsed_tx/vehicle_speed_rpt", VehicleSpeedRpt, self.speed_callback)
         self.speed      = 0.0
 
-        self.pose_subscriber = rospy.Subscriber("/zed2/zed_node/odom", PoseWithCovarianceStamped, self.ekf_callback)
-        self.ekf_x, self.ekf_y, self.ekf_heaading = 0.0, 0.0, 0.0
+        # self.pose_subscriber = rospy.Subscriber("/odometry/filtered", Odometry, self.ekf_callback)
+        self.pose_subscriber = rospy.Subscriber("/rtabmap/localization_pose", PoseWithCovarianceStamped, self.ekf_callback)
+        self.ekf_x, self.ekf_y, self.ekf_heading = 0.0, 0.0, 0.0
 
         self.lane_orientation_sub = rospy.Subscriber('/lane_orientation', Float32, self.lane_orientation_callback)
         self.lane_orientation = 0.0
@@ -181,7 +182,7 @@ class PurePursuit(object):
         q = msg.pose.pose.orientation
         [phi, theta, psi] = self.quaternion_to_euler(q.x, q.y, q.z, q.w)
         self.ekf_x, self.ekf_y = p.x, p.y
-        self.ekf_heaading = psi
+        self.ekf_heading = psi #radians
 
     def quaternion_to_euler(self, x, y, z, w):
         t0 = +2.0 * (w * x + y * z)
@@ -225,7 +226,11 @@ class PurePursuit(object):
     def read_waypoints(self):
         # read recorded GPS lat, lon, heading
         dirname  = os.path.dirname(__file__)
-        filename = os.path.join(dirname, '../waypoints/center_lane_origin.csv')
+
+        if not GEM_CAR:
+            filename = os.path.join(dirname, '/home/paulosuma/Documents/SafeAuto/mp-release-23fa-main/src/gem_Project/center_lane_origin.csv')
+        else:
+            filename = os.path.join(dirname, '/home/ece484/catkin_ws/src/vehicle_control/center_lane_origin.csv')
         with open(filename) as f:
             path_points = [tuple(line) for line in csv.reader(f)]
         # x towards East and y towards North
@@ -238,12 +243,12 @@ class PurePursuit(object):
     def get_gem_state(self):
         
         local_x_curr, local_y_curr = self.ekf_x, self.ekf_y
-        curr_yaw = self.ekf_heaading
+        curr_yaw = self.ekf_heading
 
         # reference point is located at the center of rear axle
         curr_x = local_x_curr - self.offset * np.cos(curr_yaw)
         curr_y = local_y_curr - self.offset * np.sin(curr_yaw)
-
+        print(round(curr_x, 3), round(curr_y, 3), round(curr_yaw, 4))
         return round(curr_x, 3), round(curr_y, 3), round(curr_yaw, 4)
 
     # find the angle bewtween two vectors    
@@ -342,7 +347,7 @@ class PurePursuit(object):
             f_delta_deg = np.degrees(f_delta)
 
             # steering_angle in degrees
-            # steering_angle = self.front2steer(f_delta_deg)
+            steering_angle = self.front2steer(f_delta_deg)
             
 
             #------------------------student_vision.py------------------------------#
@@ -399,6 +404,7 @@ def pure_pursuit():
     while not rospy.core.is_shutdown():
         try:
             pp.start_pp()
+            # pp.get_gem_state()
         except rospy.ROSInterruptException:
             pass
 
