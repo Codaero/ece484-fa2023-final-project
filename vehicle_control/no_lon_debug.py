@@ -29,7 +29,7 @@ from simple_pid import PID
 # GEM PACMod Headers
 from pacmod_msgs.msg import PositionWithSpeed, PacmodCmd, SystemRptFloat, VehicleSpeedRpt
 
-GEM_CAR = False
+GEM_CAR = True
 
 def pi_clip(angle):
     """function to map angle error values between [-pi, pi]"""
@@ -112,7 +112,7 @@ class PurePursuit(object):
 
         self.look_ahead = 4
         self.wheelbase  = 1.75 # meters
-        self.offset     = 0.86 # meters
+        self.offset     = 0.5 # meters
 
         self.enable_sub = rospy.Subscriber("/pacmod/as_tx/enable", Bool, self.enable_callback)
 
@@ -232,7 +232,7 @@ class PurePursuit(object):
         if not GEM_CAR:
             filename = os.path.join(dirname, '/home/paulosuma/Documents/SafeAuto/mp-release-23fa-main/src/gem_Project/output_odom_data.csv')
         else:
-            filename = os.path.join(dirname, '/home/ece484/catkin_ws/src/vehicle_control/center_lane_origin.csv')
+            filename = os.path.join(dirname, '/home/ece484/catkin_ws/src/ece484_final_project/vehicle_control/center_lane_origin.csv')
         with open(filename) as f:
             path_points = [tuple(line) for line in csv.reader(f)]
         # x towards East and y towards North
@@ -394,11 +394,12 @@ class PurePursuit(object):
                 self.turn_cmd.ui16_cmd = 0 # turn right
 
 
-            # ######### Stop sign ###########
-            # if self.ssd.detect_stop_sign():
-            #     self.accel_pub.publish(-1)
-            # else:
-            #     self.accel_pub.publish(self.accel_cmd)
+            ######### Stop sign ###########
+            if self.ssd.detect_stop_sign():
+                self.accel_pub.publish(-1)
+                print("stop sign detect")
+            else:
+                self.accel_pub.publish(self.accel_cmd)
 
 
 

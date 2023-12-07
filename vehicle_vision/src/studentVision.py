@@ -6,7 +6,7 @@ import rospy
 
 from line_fit import line_fit, tune_fit, bird_fit, final_viz
 from Line import Line
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image as sensor_msgs_Image
 from std_msgs.msg import Header
 from cv_bridge import CvBridge, CvBridgeError
 from std_msgs.msg import Float32
@@ -23,14 +23,14 @@ class lanenet_detector():
         assert GEM_SIMULATOR != ROSBAG_3 # impossible
 
         if GEM_SIMULATOR:
-            self.sub_image = rospy.Subscriber('/gem/front_single_camera/front_single_camera/image_raw', Image, self.img_callback_sim, queue_size=1)
+            self.sub_image = rospy.Subscriber('/gem/front_single_camera/front_single_camera/image_raw', sensor_msgs_Image, self.img_callback_sim, queue_size=1)
         elif ROSBAG_3:
-            self.sub_image = rospy.Subscriber(CAMERA_TOPIC, Image, self.img_callback_real, queue_size=1)
+            self.sub_image = rospy.Subscriber(CAMERA_TOPIC, sensor_msgs_Image, self.img_callback_real, queue_size=1)
         else:
-            self.sub_image = rospy.Subscriber('camera/image_raw', Image, self.img_callback_real, queue_size=1)
+            self.sub_image = rospy.Subscriber('camera/image_raw', sensor_msgs_Image, self.img_callback_real, queue_size=1)
 
-        self.pub_image = rospy.Publisher("lane_detection/annotate", Image, queue_size=1)
-        self.pub_bird = rospy.Publisher("lane_detection/birdseye", Image, queue_size=1)
+        self.pub_image = rospy.Publisher("lane_detection/annotate", sensor_msgs_Image, queue_size=1)
+        self.pub_bird = rospy.Publisher("lane_detection/birdseye", sensor_msgs_Image, queue_size=1)
         self.left_line = Line(n=5)
         self.right_line = Line(n=5)
         self.detected = False

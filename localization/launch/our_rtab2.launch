@@ -1,0 +1,118 @@
+<?xml version="1.0"?>
+<launch>
+
+   <!--
+      Demo of outdoor stereo mapping.
+      From bag:
+      $ rosbag record
+            /stereo_camera/left/image_raw_throttle/compressed
+            /stereo_camera/right/image_raw_throttle/compressed
+            /stereo_camera/left/camera_info_throttle
+            /stereo_camera/right/camera_info_throttle
+            /tf
+
+      $ roslaunch rtabmap_demos demo_stereo_outdoor.launch
+      $ rosbag play -.-clock stereo_oudoorA.bag
+   -->
+
+   <!-- Choose visualization -->
+   <arg name="rviz" default="true" />
+   <arg name="rtabmap_viz" default="true" />
+   <arg name="local_bundle" default="true" />
+   <arg name="stereo_sync" default="false" />
+
+   <param name="use_sim_time" type="bool" value="False"/>
+
+   <group ns="rtabmap">
+
+      <!-- Stereo Odometry -->
+      <node pkg="rtabmap_odom" type="stereo_odometry" name="stereo_odometry" output="screen">
+         <remap from="left/image_rect"       to="/zed2/zed_node/left/image_rect_color"/>
+         <remap from="right/image_rect"      to="/zed2/zed_node/right/image_rect_color"/>
+         <remap from="left/camera_info"      to="/zed2/zed_node/left/camera_info"/>
+         <remap from="right/camera_info"     to="/zed2/zed_node/right/camera_info"/>
+         <remap from="rgbd_image"            to="/zed2/zed_node/rgb/image_rect_color"/>
+         <remap from="odom"                  to="/zed2/zed_node/odom"/>
+
+         <param name="subscribe_rgbd"  type="bool" value="$(arg stereo_sync)"/>
+         <param name="frame_id"        type="string" value="base_link"/>
+         <param name="odom_frame_id"   type="string" value="odom"/>
+
+         <param name="Odom/Strategy"      type="string" value="0"/> <!-- 0=Frame-to-Map, 1=Frame=to=Frame -->
+         <param name="Vis/EstimationType" type="string" value="1"/> <!-- 0=3D->3D 1=3D->2D (PnP) -->
+         <param name="Vis/MaxDepth"       type="string" value="0"/>
+         <param name="Odom/GuessMotion"   type="string" value="true"/>
+         <param name="Vis/MinInliers"     type="string" value="10"/>
+         <param unless="$(arg local_bundle)" name="OdomF2M/BundleAdjustment" type="string" value="0"/>
+         <param name="OdomF2M/MaxSize"    type="string" value="1000"/>
+         <param name="GFTT/MinDistance"   type="string" value="10"/>
+         <param name="GFTT/QualityLevel"  type="string" value="0.00001"/>
+         <param name="GFTT/QualityLevel"  type="string" value="0.00001"/>
+         <param name="Reg/Force3DoF"                    value="true" /> <!-- Force 3DOF (x, y, theta)-->
+      </node>
+
+      <!-- Visual SLAM: args: "delete_db_on_start" and "udebug" -->
+      <!-- Eric Roth - 11-27-2023 : Deleted (-)-delete_db_on_start -->
+      <node name="rtabmap" pkg="rtabmap_slam" type="rtabmap" output="screen" args="--delete_db_on_start">
+         <param name="frame_id"         type="string" value="base_link"/>
+         <param unless="$(arg stereo_sync)" name="subscribe_stereo" type="bool" value="true"/>
+         <param name="subscribe_depth"  type="bool" value="true"/>
+         <param name="subscribe_rgbd"      type="bool" value="$(arg stereo_sync)"/>
+
+         <remap from="left/image_rect"       to="/zed2/zed_node/left/image_rect_color"/>
+         <remap from="right/image_rect"      to="/zed2/zed_node/right/image_rect_color"/>
+         <remap from="left/camera_info"      to="/zed2/zed_node/left/camera_info"/>
+         <remap from="right/camera_info"     to="/zed2/zed_node/right/camera_info"/>
+         <remap from="rgbd_image"            to="/zed2/zed_node/rgb/image_rect_color"/>
+
+         <remap from="odom" to="/zed2/zed_node/odom"/>
+
+         <param name="queue_size" type="int" value="30"/>
+         <param name="map_negative_poses_ignored" type="bool" value="true"/>
+
+         <!-- RTAB-Map's parameters -->
+         <param name="RGBD/OptimizeMaxError"             type="double" value="1"  />
+         <param name="RGBD/LoopClosureReextractFeatures" type="string" value="true"/> <!-- Optimization -->
+
+         <param name="Rtabmap/TimeThr"                   type="string" value="700"/>
+         <param name="Grid/DepthDecimation"              type="string" value="4"/>
+         <param name="Grid/FlatObstacleDetected"         type="string" value="true"/>
+         <param name="Kp/MaxDepth"                       type="string" value="0"/>
+         <param name="Kp/DetectorStrategy"               type="string" value="6"/>
+         <param name="Vis/EstimationType"                type="string" value="1"/>   <!-- 0=3D->3D, 1=3D->2D (PnP) -->
+         <param name="Vis/MaxDepth"                      type="string" value="0"/>
+         <param name="RGBD/CreateOccupancyGrid"          type="string" value="true"/>
+         <param name="Reg/Force3DoF"                                   value="true" /> <!-- Force 3DOF (x, y, theta) -->
+         <param name="Optimizer/Slam2D"                                value="true" /> <!-- Optimize SLAM performance for 2-D mapping -->
+         <param name="RGBD/OptimizeFromGraphEnd"         type="string" value="true"/> <!-- Optimize the graph -->
+
+         <!-- GEM vehicle specific parameters | comment out if data not available -->
+         <param name="gps_topic" value="/novatel/gps"/>
+         <param name="imu_topic" value="/novatel/imu"/>
+
+      </node>
+
+      <!-- Visualisation RTAB-Map -->
+      <node if="$(arg rtabmap_viz)" pkg="rtabmap_viz" type="rtabmap_viz" name="rtabmap_viz" args="-d $(find rtabmap_demos)/launch/config/rgbd_gui.ini" output="screen">
+         <param unless="$(arg stereo_sync)" name="subscribe_stereo"    type="bool" value="true"/>
+         <param name="subscribe_odom_info" type="bool" value="true"/>
+         <param name="subscribe_rgbd"      type="bool" value="$(arg stereo_sync)"/>
+         <param name="queue_size"          type="int" value="10"/>
+         <param name="frame_id"            type="string" value="base_footprint"/>
+
+         <remap from="left/image_rect"       to="/zed2/zed_node/left/image_rect_color"/>
+         <remap from="right/image_rect"      to="/zed2/zed_node/right/image_rect_color"/>
+         <remap from="left/camera_info"      to="/zed2/zed_node/left/camera_info"/>
+         <remap from="right/camera_info"     to="/zed2/zed_node/right/camera_info"/>
+         <remap from="rgbd_image"            to="/zed2/zed_node/rgb/image_rect_color"/>
+         <remap from="odom_info"         to="odom_info"/>
+         <remap from="odom"              to="/zed2/zed_node/odom"/>
+         <remap from="mapData"           to="mapData"/>
+      </node>
+
+   </group>
+
+   <!-- Visualisation RVIZ -->
+   <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz" args="-d $(find rtabmap_demos)/launch/config/demo_stereo_outdoor.rviz"/>
+
+</launch>
