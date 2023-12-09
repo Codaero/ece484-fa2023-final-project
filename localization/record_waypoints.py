@@ -10,7 +10,7 @@ from threading import Lock
 from geometry_msgs.msg import PoseWithCovarianceStamped
 
 # Global variables
-waypoints = np.empty((0, 2), dtype=int)
+waypoints = np.empty((0, 3), dtype=int)
 latest_message = None
 
 # Global constants
@@ -34,6 +34,20 @@ def ekf_callback(msg):
     latest_message = msg
 
 
+def quaternion_to_euler(x, y, z, w):
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll = np.arctan2(t0, t1)
+        t2 = +2.0 * (w * y - z * x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch = np.arcsin(t2)
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw = np.arctan2(t3, t4)
+        return [roll, pitch, yaw]
+
+
 def record_waypoints():
     """
     Listens to the localization_pose topic and records the waypoints at 1Hz. Used to get an accurate csv of the track.
@@ -54,7 +68,10 @@ def record_waypoints():
             continue
 
         # Add new sample to list of waypoints
-        waypoints = np.append(waypoints, [[latest_message.pose.pose.position.x, latest_message.pose.pose.position.y]], axis=0)
+        pose = latest_message.pose.pose
+        quat = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
+        euler = quaternion_to_euler(*quat)
+        waypoints = np.append(waypoints, [[pose.position.x, pose.position.y, euler[2]]], axis=0)
         last_sample = latest_message
 
 
