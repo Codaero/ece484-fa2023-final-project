@@ -1,0 +1,17 @@
+<!-- Visualisation RTAB-Map -->
+      <node if="$(arg rtabmap_viz)" pkg="rtabmap_viz" type="rtabmap_viz" name="rtabmap_viz" args="-d $(find rtabmap_demos)/launch/config/rgbd_gui.ini" output="screen">
+         <param unless="$(arg stereo_sync)" name="subscribe_stereo"    type="bool" value="true"/>
+         <param name="subscribe_odom_info" type="bool" value="true"/>
+         <param name="subscribe_rgbd"      type="bool" value="$(arg stereo_sync)"/>
+         <param name="queue_size"          type="int" value="10"/>
+         <param name="frame_id"            type="string" value="base_footprint"/>
+
+         <remap from="left/image_rect"       to="/zed2/zed_node/left/image_rect_color"/>
+         <remap from="right/image_rect"      to="/zed2/zed_node/right/image_rect_color"/>
+         <remap from="left/camera_info"      to="/zed2/zed_node/left/camera_info"/>
+         <remap from="right/camera_info"     to="/zed2/zed_node/right/camera_info"/>
+         <remap from="rgbd_image"            to="/zed2/zed_node/rgb/image_rect_color"/>
+         <remap from="odom_info"         to="odom_info"/>
+         <remap from="odom"              to="/zed2/zed_node/odom"/>
+         <remap from="mapData"           to="mapData"/>
+      </node>
