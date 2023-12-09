@@ -20,8 +20,9 @@ def save_waypoints_to_csv(ignored, ignored_again):
     """
     Behavior to execute when a ctrl-c signal is sent to the process
     """
-    fname = f"record_waypoints_{datetime.now().strftime('%d_%H_%M')}"
-    pd.DataFrame(waypoints).to_csv(fname)
+    global waypoints
+    fname = f"record_waypoints_{datetime.now().strftime('%d_%H_%M')}.csv"
+    np.savetxt(fname, waypoints, delimiter=',', fmt='%f')
     print(f"\nSaved real-time recording to `{fname}`")
     sys.exit(0) # Exit cleanly
 
