@@ -1,5 +1,13 @@
 # Autonomous GEM Car
 
+Final project for ECE 484 at UIUC. This code is meant to run on a Polaris E4 autonomous electric vehicle. The goal of the project is to autonomously control the vehicle to make a lap around the UIUC Highbay facility's testing track.
+
+[Final Video](https://www.youtube.com/watch?v=DdN4_fp8pCI&ab_channel=RobertAzarcon)
+
+## Contributors
+
+Robert Azarcon, Eric Roth, Paul Osuma, Ved Eti
+
 ## Environment Setup w/Docker
 ### Requirements:
 
